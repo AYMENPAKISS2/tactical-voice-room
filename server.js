@@ -52,7 +52,7 @@ const roomPasswords = {}; // roomName -> password
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('join-room', ({ room, name, avatar, rtcUid, password }) => {
+    socket.on('join-room', ({ room, userName, avatar, rtcUid, password }) => {
         // Password Validation
         if (roomPasswords[room]) {
             if (roomPasswords[room] !== password) {
@@ -69,15 +69,15 @@ io.on('connection', (socket) => {
         }
 
         socket.join(room);
-        users[socket.id] = { room, name, avatar, rtcUid };
+        users[socket.id] = { room, userName, avatar, rtcUid };
         socketToRoom[socket.id] = room;
 
-        console.log(`User ${name} joined room ${room}`);
+        console.log(`User ${userName} joined room ${room}`);
 
         // Broadcast to others in the room
         socket.to(room).emit('user-joined', {
             id: socket.id,
-            name,
+            userName,
             avatar,
             rtcUid
         });
@@ -90,99 +90,109 @@ io.on('connection', (socket) => {
                 if (clientId !== socket.id && users[clientId]) {
                     usersInRoom.push({
                         id: clientId,
-
-                        // Chat message broadcasting
-                        socket.on('chat-message', ({ room, message, userName, timestamp }) => {
-                            // Broadcast to all users in the room including sender
-                            io.to(room).emit('chat-message', {
-                                id: socket.id,
-                                userName,
-                                message,
-                                timestamp
-                            });
-                        });
-
-                        socket.on('disconnect', () => {
-                            const room = socketToRoom[socket.id];
-                            if (room) {
-                                socket.to(room).emit('user-left', socket.id);
-                                console.log(`User ${socket.id} left room ${room}`);
-
-                                // Update user count
-                                const clients = io.sockets.adapter.rooms.get(room);
-                                io.to(room).emit('user-count', clients ? clients.size : 0);
-
-                                // Clean up password if room is empty
-                                if (!clients || clients.size === 0) {
-                                    delete roomPasswords[room];
-                                    console.log(`Room ${room} empty, password cleared`);
-                                }
-                            }
-                            delete users[socket.id];
-                            delete socketToRoom[socket.id];
-                        });
+                        ...users[clientId]
                     });
+                }
+            }
+        }
+        socket.emit('join-success', {
+            users: usersInRoom,
+            userCount: clients ? clients.size : 0
+        });
+    });
 
-                    // --- Agora RTC Token ---
-                    const generateRtcToken = (req, resp) => {
-                        resp.header('Access-Control-Allow-Origin', '*');
+    // Chat message broadcasting
+    socket.on('chat-message', ({ room, message, userName, timestamp }) => {
+        // Broadcast to all users in the room including sender
+        io.to(room).emit('chat-message', {
+            id: socket.id,
+            userName,
+            message,
+            timestamp
+        });
+    });
 
-                        const channelName = req.query.channelName;
-                        if (!channelName) {
-                            return resp.status(500).json({ 'error': 'channel is required' });
-                        }
+    socket.on('disconnect', () => {
+        const room = socketToRoom[socket.id];
+        if (room) {
+            socket.to(room).emit('user-left', socket.id);
+            console.log(`User ${socket.id} left room ${room}`);
 
-                        let uid = req.query.uid;
-                        if (!uid || uid === '') {
-                            uid = 0;
-                        } else {
-                            uid = parseInt(uid, 10);
-                        }
+            // Update user count
+            const clients = io.sockets.adapter.rooms.get(room);
+            io.to(room).emit('user-count', clients ? clients.size : 0);
 
-                        let role = RtcRole.SUBSCRIBER;
-                        if (req.query.role === 'publisher') {
-                            role = RtcRole.PUBLISHER;
-                        }
+            // Clean up password if room is empty
+            if (!clients || clients.size === 0) {
+                delete roomPasswords[room];
+                console.log(`Room ${room} empty, password cleared`);
+            }
+        }
+        delete users[socket.id];
+        delete socketToRoom[socket.id];
+    });
+});
 
-                        let expireTime = req.query.expireTime;
-                        if (!expireTime || expireTime === '') {
-                            expireTime = 3600;
-                        } else {
-                            expireTime = parseInt(expireTime, 10);
-                        }
+// --- Agora RTC Token ---
+const generateRtcToken = (req, resp) => {
+    resp.header('Access-Control-Allow-Origin', '*');
 
-                        const currentTime = Math.floor(Date.now() / 1000);
-                        const privilegeExpireTime = currentTime + expireTime;
+    const channelName = req.query.channelName;
+    if (!channelName) {
+        return resp.status(500).json({ 'error': 'channel is required' });
+    }
 
-                        console.log(`Generating RTC Token: Channel=${channelName}, UID=${uid}, Role=${role}`);
+    let uid = req.query.uid;
+    if (!uid || uid === '') {
+        uid = 0;
+    } else {
+        uid = parseInt(uid, 10);
+    }
 
-                        // Check if Agora credentials are configured
-                        if (!APP_ID || !APP_CERTIFICATE) {
-                            console.error("Cannot generate RTC token: APP_ID and APP_CERTIFICATE not configured");
-                            return res.status(500).json({
-                                error: 'Server configuration error: Agora credentials not set',
-                                message: 'Please configure APP_ID and APP_CERTIFICATE environment variables'
-                            });
-                        }
+    let role = RtcRole.SUBSCRIBER;
+    if (req.query.role === 'publisher') {
+        role = RtcRole.PUBLISHER;
+    }
 
-                        let token;
-                        try {
-                            token = RtcTokenBuilder.buildTokenWithUid(APP_ID, APP_CERTIFICATE, channelName, uid, role, privilegeExpireTime);
-                        } catch (err) {
-                            console.error("Error generating RTC token:", err);
-                            return resp.status(500).json({ 'error': 'Failed to generate RTC token' });
-                        }
+    let expireTime = req.query.expireTime;
+    if (!expireTime || expireTime === '') {
+        expireTime = 3600;
+    } else {
+        expireTime = parseInt(expireTime, 10);
+    }
 
-                        return resp.json({ 'rtcToken': token });
-                    };
+    const currentTime = Math.floor(Date.now() / 1000);
+    const privilegeExpireTime = currentTime + expireTime;
 
-                    app.get('/api/token/rtc', generateRtcToken);
+    console.log(`Generating RTC Token: Channel=${channelName}, UID=${uid}, Role=${role}`);
 
-                    // Catch-all for SPA
-                    app.get(/.*/, (req, res) => {
-                        res.sendFile(path.join(__dirname, 'index.html'));
-                    });
+    // Check if Agora credentials are configured
+    if (!APP_ID || !APP_CERTIFICATE) {
+        console.error("Cannot generate RTC token: APP_ID and APP_CERTIFICATE not configured");
+        return resp.status(500).json({
+            error: 'Server configuration error: Agora credentials not set',
+            message: 'Please configure APP_ID and APP_CERTIFICATE environment variables'
+        });
+    }
 
-                    httpServer.listen(PORT, () => {
-                        console.log(`Server running on port ${PORT} with Socket.io`);
-                    });
+    let token;
+    try {
+        token = RtcTokenBuilder.buildTokenWithUid(APP_ID, APP_CERTIFICATE, channelName, uid, role, privilegeExpireTime);
+    } catch (err) {
+        console.error("Error generating RTC token:", err);
+        return resp.status(500).json({ 'error': 'Failed to generate RTC token' });
+    }
+
+    return resp.json({ 'rtcToken': token });
+};
+
+app.get('/api/token/rtc', generateRtcToken);
+
+// Catch-all for SPA
+app.get(/.*/, (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+httpServer.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} with Socket.io`);
+});
