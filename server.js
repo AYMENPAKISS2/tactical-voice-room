@@ -38,9 +38,10 @@ const APP_ID = process.env.APP_ID ? process.env.APP_ID.trim() : '';
 const APP_CERTIFICATE = process.env.APP_CERTIFICATE ? process.env.APP_CERTIFICATE.trim() : '';
 
 if (!APP_ID || !APP_CERTIFICATE) {
-    console.error("FATAL ERROR: APP_ID and APP_CERTIFICATE must be set in .env file");
+    console.warn("⚠️  WARNING: APP_ID and APP_CERTIFICATE not set. Voice features will not work.");
+    console.warn("⚠️  Please set these environment variables in Railway dashboard.");
 } else {
-    console.log(`Agora Config: APP_ID=${APP_ID.substring(0, 5)}..., CERT=${APP_CERTIFICATE.substring(0, 5)}...`);
+    console.log(`✅ Agora Config: APP_ID=${APP_ID.substring(0, 5)}..., CERT=${APP_CERTIFICATE.substring(0, 5)}...`);
 }
 
 // --- Socket.io Signaling ---
@@ -171,6 +172,15 @@ const generateRtcToken = (req, resp) => {
     const privilegeExpireTime = currentTime + expireTime;
 
     console.log(`Generating RTC Token: Channel=${channelName}, UID=${uid}, Role=${role}`);
+
+    // Check if Agora credentials are configured
+    if (!APP_ID || !APP_CERTIFICATE) {
+        console.error("Cannot generate RTC token: APP_ID and APP_CERTIFICATE not configured");
+        return res.status(500).json({
+            error: 'Server configuration error: Agora credentials not set',
+            message: 'Please configure APP_ID and APP_CERTIFICATE environment variables'
+        });
+    }
 
     let token;
     try {
