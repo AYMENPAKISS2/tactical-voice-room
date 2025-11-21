@@ -24,6 +24,25 @@
                 .then(reg => console.log('SW registered', reg))
                 .catch(err => console.error('SW failed', err));
         }
+    </script>
+</head>
+
+<body>
+    <div id="app-container">
+        <section id="landing-section" class="active-section">
+            <div class="glass-panel entry-panel">
+                <div class="brand-header">
+                    <img src="/logo.jpg" alt="Vato's Room Logo" class="brand-logo"
+                        style="max-width: 150px; margin-bottom: 1rem; border-radius: 50%;">
+                    <h1>VATO's ROOM</h1>
+                    <p>Tactical Audio Comms</p>
+                </div>
+                <form id="form">
+                    <div class="form-group">
+                        <label>Select Operative</label>
+                        <div id="avatars" class="avatar-grid">
+                            <img class="avatar-selection" src="/avatars/cs-1.png" data-id="1" alt="CT 1" />
+                            <img class="avatar-selection" src="/avatars/cs-2.png" data-id="2" alt="T 1" />
                             <img class="avatar-selection" src="/avatars/cs-3.png" data-id="3" alt="CT 2" />
                             <img class="avatar-selection" src="/avatars/cs-4.png" data-id="4" alt="T 2" />
                         </div>
