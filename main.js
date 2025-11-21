@@ -143,6 +143,9 @@ async function joinRoom(e) {
       // Add self
       addMemberCard(socket.id, currentName, currentAvatar, true);
 
+      // Show chat panel
+      chatPanel.classList.add('visible');
+
       // Setup chat listeners
       setupChatListeners();
     });
@@ -294,7 +297,7 @@ async function leaveRoom() {
 
   membersContainer.innerHTML = '';
   chatMessages.innerHTML = '';
-  chatPanel.classList.remove('open');
+  chatPanel.classList.remove('visible');
   roomSection.style.display = 'none';
   landingSection.classList.add('active-section');
   form.reset();

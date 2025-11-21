@@ -3,7 +3,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.6rem;
     margin-bottom: 0.75rem;
     padding-right: 0.5rem;
 }
@@ -15,12 +15,59 @@
 #chat-messages::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.05);
 }
+
+#chat-messages::-webkit-scrollbar-thumb {
+    background: var(--accent-color);
+    border-radius: 2px;
 }
 
-to {
-    opacity: 1;
-    transform: translateX(0);
+.chat-message {
+    background: linear-gradient(90deg, rgba(20, 25, 15, 0.9) 0%, rgba(15, 20, 12, 0.8) 100%);
+    padding: 0.65rem 0.85rem;
+    border-radius: 2px;
+    border-left: 4px solid rgba(100, 120, 80, 0.5);
+    border-right: 1px solid rgba(222, 155, 53, 0.1);
+    animation: slideInLeft 0.3s ease;
+    max-width: 85%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    position: relative;
 }
+
+.chat-message::before {
+    content: '▸';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(100, 120, 80, 0.6);
+    font-size: 1.2rem;
+}
+
+.chat-message.own {
+    background: linear-gradient(90deg, rgba(40, 30, 10, 0.9) 0%, rgba(35, 25, 8, 0.8) 100%);
+    border-left-color: var(--accent-color);
+    border-right-color: rgba(222, 155, 53, 0.3);
+    align-self: flex-end;
+    box-shadow: 0 2px 12px rgba(222, 155, 53, 0.2);
+}
+
+.chat-message.own::before {
+    content: '◂';
+    left: auto;
+    right: -12px;
+    color: rgba(222, 155, 53, 0.6);
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .chat-meta {
@@ -43,10 +90,43 @@ to {
 }
 
 .chat-text {
-    height: 36px;
-    border-radius: 4px;
+    color: var(--text-primary);
+    word-wrap: break-word;
+    line-height: 1.3;
+    font-size: 0.9rem;
+}
+
+.chat-input-container {
+    display: flex;
+    gap: 0.75rem;
+    background: linear-gradient(180deg, rgba(15, 18, 12, 0.95) 0%, rgba(10, 12, 8, 0.98) 100%);
+    padding: 1rem;
+    border-radius: 2px;
+    border: 2px solid rgba(100, 120, 80, 0.3);
+    border-top: 2px solid var(--accent-color);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(222, 155, 53, 0.1);
+    position: relative;
+}
+
+.chat-input-container::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+    opacity: 0.5;
+}
+
+.emoji-trigger {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--panel-border);
+    width: 40px;
+    height: 40px;
+    border-radius: 2px;
     cursor: pointer;
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     transition: all 0.2s;
     display: flex;
     align-items: center;
@@ -54,16 +134,17 @@ to {
 }
 
 .emoji-trigger:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(100, 120, 80, 0.2);
     transform: scale(1.05);
+    border-color: rgba(100, 120, 80, 0.5);
 }
 
 #chat-input {
     flex: 1;
     background: rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    padding: 0.5rem 0.75rem;
+    border: 1px solid rgba(100, 120, 80, 0.3);
+    border-radius: 2px;
+    padding: 0.6rem 0.85rem;
     color: var(--text-primary);
     font-family: var(--font-main);
     font-size: 0.9rem;
@@ -72,7 +153,7 @@ to {
 #chat-input:focus {
     outline: none;
     border-color: var(--accent-color);
-    box-shadow: 0 0 8px rgba(222, 155, 53, 0.3);
+    box-shadow: 0 0 12px rgba(222, 155, 53, 0.3), inset 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 #chat-input::placeholder {
@@ -81,21 +162,23 @@ to {
 
 .send-btn {
     background: linear-gradient(180deg, var(--accent-color) 0%, #b87b20 100%);
-    border: none;
-    border-radius: 4px;
-    padding: 0 1.5rem;
+    border: 2px solid rgba(222, 155, 53, 0.5);
+    border-radius: 2px;
+    padding: 0 1.75rem;
     color: #000;
     font-weight: 700;
     font-size: 0.85rem;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
     cursor: pointer;
     transition: all 0.2s;
     text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .send-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(222, 155, 53, 0.5);
+    box-shadow: 0 4px 16px rgba(222, 155, 53, 0.6);
+    border-color: var(--accent-color);
 }
 
 .send-btn:active {
@@ -104,20 +187,20 @@ to {
 
 .emoji-picker {
     position: absolute;
-    bottom: 70px;
-    left: 1rem;
-    background: var(--panel-bg);
+    bottom: 75px;
+    left: 1.5rem;
+    background: linear-gradient(180deg, rgba(15, 18, 12, 0.98) 0%, rgba(10, 12, 8, 0.98) 100%);
     border: 2px solid var(--accent-color);
-    border-radius: 8px;
+    border-radius: 4px;
     padding: 1rem;
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     gap: 0.5rem;
-    max-height: 200px;
-    max-width: 400px;
+    max-height: 220px;
+    max-width: 420px;
     overflow-y: auto;
     z-index: 100;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 20px rgba(222, 155, 53, 0.2);
 }
 
 .emoji-picker.hidden {
@@ -125,41 +208,49 @@ to {
 }
 
 .emoji-btn {
-    background: none;
-    border: none;
-    font-size: 1.3rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(100, 120, 80, 0.2);
+    font-size: 1.4rem;
     cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
+    padding: 0.3rem;
+    border-radius: 2px;
     transition: all 0.2s;
 }
 
 .emoji-btn:hover {
     background: rgba(222, 155, 53, 0.2);
     transform: scale(1.2);
+    border-color: var(--accent-color);
 }
 
 /* Adjust members container to not overlap chat */
 #members-container {
-    padding-bottom: 270px !important;
+    padding-bottom: 300px !important;
 }
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
     #chat-panel {
-        height: 200px;
+        height: 220px;
+        padding: 0.75rem 1rem;
     }
 
     #members-container {
-        padding-bottom: 220px !important;
+        padding-bottom: 240px !important;
     }
 
     .emoji-picker {
         grid-template-columns: repeat(6, 1fr);
         max-width: calc(100% - 2rem);
+        left: 1rem;
     }
 
     .chat-message {
         max-width: 90%;
+    }
+
+    .chat-input-container {
+        gap: 0.5rem;
+        padding: 0.75rem;
     }
 }
