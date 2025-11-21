@@ -96,6 +96,13 @@ io.on('connection', (socket) => {
         }
         socket.emit('existing-users', usersInRoom);
 
+        // Emit room-joined event to the joining user
+        socket.emit('room-joined', {
+            rtcToken,
+            rtcUid,
+            userCount: clients ? clients.size : 0
+        });
+
         // Broadcast user count
         io.to(room).emit('user-count', clients ? clients.size : 0);
     });
