@@ -138,7 +138,8 @@ async function joinRoom(e) {
 
       // Update UI
       landingSection.classList.remove('active-section');
-      roomSection.style.display = 'block';
+      roomSection.classList.add('active-section');
+      // roomSection.style.display = 'block'; // Removed to use CSS class
       roomNameDisplay.textContent = currentRoom;
       userCountDisplay.textContent = `${userCount} Operative${userCount !== 1 ? 's' : ''}`;
 

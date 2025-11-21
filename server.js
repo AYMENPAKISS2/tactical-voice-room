@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001; // Changed to 3001 to avoid conflict
 
 // Force no cache for API
 app.use(nocache());
@@ -148,42 +148,30 @@ const generateRtcToken = (req, resp) => {
     } else {
         uid = parseInt(uid, 10);
     }
-
     let role = RtcRole.SUBSCRIBER;
     if (req.query.role === 'publisher') {
         role = RtcRole.PUBLISHER;
     }
 
-    let expireTime = req.query.expireTime;
-    if (!expireTime || expireTime === '') {
-        expireTime = 3600;
-    } else {
-        expireTime = parseInt(expireTime, 10);
+    const expirationTimeInSeconds = 3600;
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+
+    // Use env vars or fallback to provided keys for local testing
+    const appId = process.env.APP_ID || 'abfbe50f6a26478e8edd01dd05cf2b65';
+    const appCertificate = process.env.APP_CERTIFICATE || '31fb5977f0bb4f799be0edc88e814afe';
+
+    if (!appId || !appCertificate) {
+        return resp.status(500).json({ 'error': 'APP_ID and APP_CERTIFICATE are required' });
     }
 
-    const currentTime = Math.floor(Date.now() / 1000);
-    const privilegeExpireTime = currentTime + expireTime;
-
-    console.log(`Generating RTC Token: Channel=${channelName}, UID=${uid}, Role=${role}`);
-
-    // Check if Agora credentials are configured
-    if (!APP_ID || !APP_CERTIFICATE) {
-        console.error("Cannot generate RTC token: APP_ID and APP_CERTIFICATE not configured");
-        return resp.status(500).json({
-            error: 'Server configuration error: Agora credentials not set',
-            message: 'Please configure APP_ID and APP_CERTIFICATE environment variables'
-        });
-    }
-
-    let token;
     try {
-        token = RtcTokenBuilder.buildTokenWithUid(APP_ID, APP_CERTIFICATE, channelName, uid, role, privilegeExpireTime);
+        const token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, uid, role, privilegeExpiredTs);
+        return resp.json({ 'rtcToken': token, 'uid': uid });
     } catch (err) {
-        console.error("Error generating RTC token:", err);
-        return resp.status(500).json({ 'error': 'Failed to generate RTC token' });
+        console.error('Error generating token:', err);
+        return resp.status(500).json({ 'error': 'Failed to generate token' });
     }
-
-    return resp.json({ 'rtcToken': token });
 };
 
 app.get('/api/token/rtc', generateRtcToken);
@@ -195,5 +183,5 @@ app.get(/.*/, (req, res) => {
 });
 
 httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} with Socket.io`);
+    console.log(`✅ VATO SERVER RUNNING on port ${PORT}`);
 });
