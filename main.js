@@ -96,7 +96,7 @@ async function joinRoom(e) {
       console.log('Joined room successfully', users);
 
       // Get RTC token from server
-      const response = await fetch(`/api/token/rtc?channel=${currentRoom}&uid=0`);
+      const response = await fetch(`/api/token/rtc?channelName=${currentRoom}&uid=0&role=publisher`);
 
       if (!response.ok) {
         const errData = await response.json();
