@@ -88,10 +88,6 @@
                         <img id="mic-icon" src="/icons/mic-off.svg" alt="Microphone" />
                         <span class="btn-label">MIC</span>
                     </button>
-                    <button id="chat-btn" class="control-btn" title="Open Chat">
-                        <img src="/icons/chat.svg" alt="Chat" />
-                        <span class="btn-label">CHAT</span>
-                    </button>
                     <button id="leave-btn" class="control-btn danger" title="Abort Mission">
                         <img src="/icons/leave.svg" alt="Leave" />
                         <span class="btn-label">EXIT</span>
@@ -99,25 +95,20 @@
                 </div>
             </header>
             <main id="members-container"></main>
-            <aside id="chat-panel">
-                <div class="chat-header">
-                    <h3>TACTICAL COMMS</h3>
-                    <button id="close-chat" class="control-btn">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M15 5L5 15M5 5L15 15" stroke="#de9b35" stroke-width="2" />
-                        </svg>
-                    </button>
-                </div>
-                <div id="chat-messages"></div>
-                <div id="emoji-picker" class="emoji-picker hidden"></div>
-                <div class="chat-input-container">
-                    <button id="emoji-btn" class="emoji-trigger">😀</button>
-                    <input type="text" id="chat-input" placeholder="Send message..." maxlength="200" />
-                    <button id="send-btn" class="send-btn">SEND</button>
-                </div>
-            </aside>
         </section>
     </div>
+
+    <!-- Permanent Chat Panel - Always Visible at Bottom -->
+    <aside id="chat-panel">
+        <div id="chat-messages"></div>
+        <div id="emoji-picker" class="emoji-picker hidden"></div>
+        <div class="chat-input-container">
+            <button id="emoji-btn" class="emoji-trigger">😀</button>
+            <input type="text" id="chat-input" placeholder="Type message..." maxlength="200" />
+            <button id="send-btn" class="send-btn">SEND</button>
+        </div>
+    </aside>
+
     <div id="notification-area"></div>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>

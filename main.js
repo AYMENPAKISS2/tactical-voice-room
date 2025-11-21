@@ -32,8 +32,6 @@ const userCountDisplay = document.getElementById('user-count-display');
 
 // Chat UI Elements
 const chatPanel = document.getElementById('chat-panel');
-const chatBtn = document.getElementById('chat-btn');
-const closeChatBtn = document.getElementById('close-chat');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const chatMessages = document.getElementById('chat-messages');
@@ -342,15 +340,6 @@ function initEmojiPicker() {
     emojiPicker.appendChild(btn);
   });
 }
-
-// Toggle chat panel
-chatBtn.addEventListener('click', () => {
-  chatPanel.classList.add('open');
-});
-
-closeChatBtn.addEventListener('click', () => {
-  chatPanel.classList.remove('open');
-});
 
 // Toggle emoji picker
 emojiBtn.addEventListener('click', () => {
