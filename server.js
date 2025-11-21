@@ -100,6 +100,17 @@ io.on('connection', (socket) => {
         io.to(room).emit('user-count', clients ? clients.size : 0);
     });
 
+    // Chat message broadcasting
+    socket.on('chat-message', ({ room, message, userName, timestamp }) => {
+        // Broadcast to all users in the room including sender
+        io.to(room).emit('chat-message', {
+            id: socket.id,
+            userName,
+            message,
+            timestamp
+        });
+    });
+
     socket.on('disconnect', () => {
         const room = socketToRoom[socket.id];
         if (room) {

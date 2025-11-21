@@ -29,334 +29,398 @@ const shareBtn = document.getElementById('share-btn');
 const membersContainer = document.getElementById('members-container');
 const roomNameDisplay = document.getElementById('room-name-display');
 const userCountDisplay = document.getElementById('user-count-display');
-const micIcon = document.getElementById('mic-icon');
 
-// --- Helper Functions ---
+// Chat UI Elements
+const chatPanel = document.getElementById('chat-panel');
+const chatBtn = document.getElementById('chat-btn');
+const closeChatBtn = document.getElementById('close-chat');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const chatMessages = document.getElementById('chat-messages');
+const emojiBtn = document.getElementById('emoji-btn');
+const emojiPicker = document.getElementById('emoji-picker');
 
-const showNotification = (message, type = 'info') => {
-  const container = document.getElementById('notification-area');
-  const notif = document.createElement('div');
-  notif.className = `notification ${type}`;
-  notif.innerText = message;
-  container.appendChild(notif);
-  setTimeout(() => notif.remove(), 3000);
-};
+// Emoji list
+const emojis = ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😤', '😠', '😡', '🤬', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '👍', '👎', '👊', '✊', '🤛', '🤜', '🤞', '✌️', '🤟', '🤘', '👌', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐️', '👋', '🤙', '💪', '🖕', '✍️', '🙏', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '🔥', '✨', '💫', '⭐', '🌟', '💥', '💯', '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '🥈', '🥉', '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱', '🏓', '🏸', '🥅', '🏒', '🏑', '🥍', '🏏', '⛳', '🏹', '🎣', '🥊', '🥋', '🎽', '⛸️', '🥌', '🛷', '🎿', '⛷️', '🏂', '🏋️', '🤼', '🤸', '🤺', '⛹️', '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽', '🚣', '🧗', '🚴', '🚵', '🎪', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🎻', '🎲', '🎯', '🎳', '🎮', '🎰', '🧩'];
 
-const switchSection = (toSection) => {
-  document.querySelectorAll('section').forEach(s => s.classList.remove('active-section'));
-  toSection.classList.add('active-section');
-};
-
-// --- Token Fetching ---
-
-const fetchRtcToken = async (uid, channelName) => {
-  const response = await fetch(`/api/token/rtc?uid=${uid}&channelName=${channelName}&role=publisher`);
-  const data = await response.json();
-  return data.rtcToken;
-};
-
-// --- Avatar Selection ---
-
+// Avatar selection
 avatarsContainer.addEventListener('click', (e) => {
   if (e.target.classList.contains('avatar-selection')) {
-    document.querySelectorAll('.avatar-selection').forEach(img => img.classList.remove('selected'));
+    document.querySelectorAll('.avatar-selection').forEach(av => av.classList.remove('selected'));
     e.target.classList.add('selected');
-    currentAvatar = e.target.src;
+    currentAvatar = e.target.dataset.id;
   }
 });
 
-// --- Main Logic ---
+// Check URL for shared room
+function checkSharedRoom() {
+  const params = new URLSearchParams(window.location.search);
+  const roomName = params.get('room');
+  const roomPassword = params.get('password');
 
-const initSocket = (name, room, rtcUid, password) => {
-  socket = io();
-
-  socket.on('connect', () => {
-    console.log('Connected to Socket.io server');
-    // Join the room
-    socket.emit('join-room', {
-      room,
-      name,
-      avatar: currentAvatar,
-      rtcUid,
-      password
-    });
-  });
-
-  socket.on('error-msg', (msg) => {
-    showNotification(msg, 'error');
-    leaveRoom(); // Force leave if error (like invalid password)
-  });
-
-  socket.on('existing-users', (users) => {
-    users.forEach(user => {
-      addMemberToDom(user.id, user.name, user.avatar, user.rtcUid);
-    });
-  });
-
-  socket.on('user-joined', (user) => {
-    addMemberToDom(user.id, user.name, user.avatar, user.rtcUid);
-    showNotification(`${user.name} joined!`);
-  });
-
-  socket.on('user-left', (socketId) => {
-    removeMemberFromDom(socketId);
-  });
-
-  socket.on('user-count', (count) => {
-    if (userCountDisplay) {
-      userCountDisplay.innerText = `${count} User${count !== 1 ? 's' : ''}`;
+  if (roomName) {
+    form.roomname.value = roomName;
+    if (roomPassword) {
+      form.roompassword.value = roomPassword;
     }
-  });
-};
-
-const initRtc = async (uid, room) => {
-  rtcClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-
-  rtcClient.on("user-published", handleUserPublished);
-  rtcClient.on("user-left", handleUserLeft);
-
-  // Volume Indicator
-  AgoraRTC.setParameter('AUDIO_VOLUME_INDICATION_INTERVAL', 200);
-  rtcClient.enableAudioVolumeIndicator();
-  rtcClient.on("volume-indicator", handleVolumeIndicator);
-
-  const token = await fetchRtcToken(uid, room);
-  await rtcClient.join(appid, room, token, uid);
-
-  try {
-    localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-    localTracks.audioTrack.setMuted(micMuted);
-    await rtcClient.publish(localTracks.audioTrack);
-    updateMicUI();
-  } catch (error) {
-    console.error("Microphone access failed:", error);
-    showNotification("Microphone not found. Joining as listener only.", "warning");
-    // Disable mic button since we have no mic
-    micBtn.disabled = true;
-    micBtn.style.opacity = "0.5";
   }
-};
+}
 
-const joinRoom = async (e) => {
+checkSharedRoom();
+
+// Join room
+async function joinRoom(e) {
   e.preventDefault();
 
   if (!currentAvatar) {
-    showNotification("Please select an avatar!", "error");
+    showNotification('Please select an operative', 'error');
     return;
   }
 
-  const displayName = e.target.displayname.value;
-  const roomName = e.target.roomname.value.toLowerCase();
-  const password = e.target.roompassword ? e.target.roompassword.value : '';
-
-  currentName = displayName;
-  currentRoom = roomName;
-  currentPassword = password;
-
-  // Generate a numeric UID for RTC
-  const uid = Math.floor(Math.random() * 10000) + 1;
-  myRtcUid = uid;
-
-  console.log(`Joining room: ${roomName} as ${displayName} (RTC UID: ${uid})`);
+  currentName = form.displayname.value;
+  currentRoom = form.roomname.value;
+  currentPassword = form.roompassword.value || '';
 
   try {
-    // 1. Init Socket.io for signaling (Members list)
-    initSocket(displayName, roomName, uid, password);
+    // Connect Socket.io
+    socket = io();
 
-    // 2. Init RTC for Audio
-    showNotification("Connecting to audio...", "info");
-    await initRtc(uid, roomName);
+    // Join room with password
+    socket.emit('join-room', {
+      room: currentRoom,
+      password: currentPassword,
+      userName: currentName,
+      avatar: currentAvatar
+    });
 
-    // 3. Update UI
-    roomNameDisplay.innerText = roomName;
-    switchSection(roomSection);
+    // Handle join response
+    socket.on('join-success', async ({ users, userCount }) => {
+      console.log('Joined room successfully', users);
 
-    // Add self to UI (using 'local' as ID)
-    addMemberToDom('local', displayName, currentAvatar, uid);
+      // Get RTC token from server
+      const response = await fetch(`/rtc-token?channel=${currentRoom}&uid=0`);
+      const { token, uid } = await response.json();
+      myRtcUid = uid;
 
-    showNotification(`Joined room: ${roomName}`);
+      // Initialize RTC
+      rtcClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+      await rtcClient.join(appid, currentRoom, token, myRtcUid);
+      console.log('Joined RTC channel with UID:', myRtcUid);
+
+      // Create and publish audio track
+      try {
+        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        await rtcClient.publish([localTracks.audioTrack]);
+        localTracks.audioTrack.setMuted(true); // Start muted
+        micMuted = true;
+        updateMicButton();
+      } catch (err) {
+        console.error('Microphone access error:', err);
+        showNotification('Could not access microphone. Joining as listener.', 'error');
+      }
+
+      // Setup RTC event listeners
+      rtcClient.on('user-published', handleUserPublished);
+      rtcClient.on('user-unpublished', handleUserUnpublished);
+      rtcClient.on('user-left', handleUserLeft);
+      rtcClient.on('volume-indicator', handleVolumeIndicator);
+
+      // Enable volume indicator
+      rtcClient.enableAudioVolumeIndicator();
+
+      // Update UI
+      landingSection.classList.remove('active-section');
+      roomSection.style.display = 'block';
+      roomNameDisplay.textContent = currentRoom;
+      userCountDisplay.textContent = `${userCount} Operative${userCount !== 1 ? 's' : ''}`;
+
+      // Display existing users
+      users.forEach(user => {
+        if (user.id !== socket.id) {
+          addMemberCard(user.id, user.userName, user.avatar);
+        }
+      });
+
+      // Add self
+      addMemberCard(socket.id, currentName, currentAvatar, true);
+
+      // Setup chat listeners
+      setupChatListeners();
+    });
+
+    socket.on('join-error', ({ message }) => {
+      showNotification(message, 'error');
+    });
+
+    socket.on('user-joined', ({ id, userName, avatar }) => {
+      console.log('User joined:', userName);
+      addMemberCard(id, userName, avatar);
+      showNotification(`${userName} joined the room`, 'success');
+    });
+
+    socket.on('user-left', (socketId) => {
+      removeMemberCard(socketId);
+    });
+
+    socket.on('user-count', (count) => {
+      userCountDisplay.textContent = `${count} Operative${count !== 1 ? 's' : ''}`;
+    });
+
   } catch (error) {
-    console.error(error);
-    showNotification("Failed to join audio. Check console.", "error");
+    console.error('Join error:', error);
+    showNotification('Failed to join room', 'error');
   }
-};
+}
 
-const leaveRoom = async () => {
-  // Leave RTC
-  if (localTracks.audioTrack) {
-    localTracks.audioTrack.stop();
-    localTracks.audioTrack.close();
-  }
-  if (rtcClient) {
-    await rtcClient.unpublish();
-    await rtcClient.leave();
-  }
-
-  // Leave Socket
-  if (socket) {
-    socket.disconnect();
-  }
-
-  membersContainer.innerHTML = '';
-  switchSection(landingSection);
-  showNotification("Left the room");
-};
-
-const shareRoom = () => {
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', currentRoom);
-  if (currentPassword) {
-    url.searchParams.set('pass', currentPassword);
-  }
-
-  navigator.clipboard.writeText(url.toString()).then(() => {
-    showNotification("Room link copied to clipboard!", "success");
-  }).catch(err => {
-    console.error('Could not copy text: ', err);
-    showNotification("Failed to copy link", "error");
-  });
-};
-
-// --- Event Handlers ---
-
-const handleUserPublished = async (user, mediaType) => {
+// RTC Handlers
+async function handleUserPublished(user, mediaType) {
   await rtcClient.subscribe(user, mediaType);
-  if (mediaType === "audio") {
+
+  if (mediaType === 'audio') {
+    remoteUsers[user.uid] = user;
     if (user.audioTrack) {
       user.audioTrack.play();
-    } else {
-      console.warn("Audio track not found for user", user.uid);
     }
   }
-};
+}
 
-const handleUserLeft = (user) => {
-  // Socket.io handles UI removal via 'user-left' event
-  // But we can also use this to double check if needed
-};
+function handleUserUnpublished(user, mediaType) {
+  if (mediaType === 'audio') {
+    delete remoteUsers[user.uid];
+  }
+}
 
-const handleVolumeIndicator = (volumes) => {
-  volumes.forEach((volume) => {
-    // volume.uid is the RTC UID
-    // We need to find the DOM element with this RTC UID
+function handleUserLeft(user) {
+  delete remoteUsers[user.uid];
+}
 
-    // Local user check
-    let targetUid = volume.uid;
-    if (targetUid === 0 && myRtcUid) {
-      targetUid = myRtcUid;
-    }
-
-    const avatarWrapper = document.querySelector(`.avatar-wrapper[data-rtc-uid="${targetUid}"]`);
-
-    if (avatarWrapper) {
-      if (volume.level > 5) {
-        avatarWrapper.classList.add('speaking');
-      } else {
-        avatarWrapper.classList.remove('speaking');
+function handleVolumeIndicator(volumes) {
+  volumes.forEach(volume => {
+    if (volume.level > 10) {
+      const card = document.querySelector(`[data-socket-id="${volume.uid}"]`);
+      if (card) {
+        card.querySelector('.avatar-wrapper').classList.add('speaking');
+        setTimeout(() => {
+          card.querySelector('.avatar-wrapper').classList.remove('speaking');
+        }, 200);
       }
     }
   });
-};
+}
 
-const addMemberToDom = (socketId, name, avatarUrl, rtcUid) => {
-  // Avoid duplicates
-  if (document.getElementById(`member-${socketId}`)) return;
+// UI Functions
+function addMemberCard(socketId, userName, avatarId, isSelf = false) {
+  const card = document.createElement('div');
+  card.className = 'member-card';
+  card.dataset.socketId = socketId;
 
-  const memberCard = document.createElement('div');
-  memberCard.className = 'member-card';
-  memberCard.id = `member-${socketId}`;
-
-  // Add mute button for remote users
-  let muteBtnHtml = '';
-  if (socketId !== 'local') {
-    muteBtnHtml = `
-        <button class="mute-remote-btn" onclick="toggleRemoteMute('${rtcUid}', this)" title="Mute this user">
-            <img src="icons/mic.svg" alt="Mute" width="16" />
+  card.innerHTML = `
+    <div class="avatar-wrapper">
+      <img src="/avatars/cs-${avatarId}.png" alt="${userName}" class="member-avatar" />
+    </div>
+    <div class="member-info">
+      <span class="member-name">${userName}${isSelf ? ' (You)' : ''}</span>
+      ${!isSelf ? `
+        <button class="mute-remote-btn" data-socket-id="${socketId}" title="Mute locally">
+          🔇
         </button>
-      `;
+      ` : ''}
+    </div>
+  `;
+
+  membersContainer.appendChild(card);
+
+  // Local mute functionality
+  if (!isSelf) {
+    const muteBtn = card.querySelector('.mute-remote-btn');
+    muteBtn.addEventListener('click', () => {
+      const user = Object.values(remoteUsers).find(u => u.uid.toString() === socketId);
+      if (user && user.audioTrack) {
+        const isMuted = user.audioTrack.isPlaying;
+        if (isMuted) {
+          user.audioTrack.stop();
+          muteBtn.textContent = '🔊';
+          muteBtn.title = 'Unmute locally';
+        } else {
+          user.audioTrack.play();
+          muteBtn.textContent = '🔇';
+          muteBtn.title = 'Mute locally';
+        }
+      }
+    });
   }
+}
 
-  memberCard.innerHTML = `
-        <div class="avatar-wrapper" data-rtc-uid="${rtcUid}">
-            <img class="member-avatar" src="${avatarUrl || 'avatars/male-1.png'}" alt="${name}" />
-        </div>
-        <div class="member-info">
-            <div class="member-name">${name}</div>
-            ${muteBtnHtml}
-        </div>
-    `;
-
-  membersContainer.appendChild(memberCard);
-};
-
-const removeMemberFromDom = (socketId) => {
-  const memberEl = document.getElementById(`member-${socketId}`);
-  if (memberEl) {
-    memberEl.style.opacity = '0';
-    memberEl.style.transform = 'scale(0.5)';
-    setTimeout(() => memberEl.remove(), 300);
+function removeMemberCard(socketId) {
+  const card = document.querySelector(`[data-socket-id="${socketId}"]`);
+  if (card) {
+    card.remove();
   }
-};
+}
 
-const toggleMic = () => {
+function toggleMic() {
+  if (!localTracks.audioTrack) return;
+
   micMuted = !micMuted;
-  if (localTracks.audioTrack) {
-    localTracks.audioTrack.setMuted(micMuted);
-  }
-  updateMicUI();
-};
+  localTracks.audioTrack.setMuted(micMuted);
+  updateMicButton();
+}
 
-const updateMicUI = () => {
+function updateMicButton() {
+  const micIcon = document.getElementById('mic-icon');
   if (micMuted) {
+    micIcon.src = '/icons/mic-off.svg';
     micBtn.classList.remove('active');
-    micIcon.src = 'icons/mic-off.svg';
-    micBtn.style.background = 'rgba(239, 68, 68, 0.2)';
   } else {
+    micIcon.src = '/icons/mic.svg';
     micBtn.classList.add('active');
-    micIcon.src = 'icons/mic.svg';
-    micBtn.style.background = 'var(--success)';
   }
-};
+}
 
-// --- Global Functions (for onclick) ---
-
-window.toggleRemoteMute = (rtcUid, btn) => {
-  const uid = parseInt(rtcUid);
-  const remoteUser = rtcClient.remoteUsers.find(user => user.uid === uid);
-
-  if (remoteUser && remoteUser.audioTrack) {
-    if (remoteUser.audioTrack.isPlaying) {
-      remoteUser.audioTrack.stop(); // "Mute" locally by stopping playback
-      btn.classList.add('muted');
-      btn.querySelector('img').src = 'icons/mic-off.svg';
-      btn.style.background = 'rgba(239, 68, 68, 0.2)';
-    } else {
-      remoteUser.audioTrack.play(); // "Unmute" locally
-      btn.classList.remove('muted');
-      btn.querySelector('img').src = 'icons/mic.svg';
-      btn.style.background = 'rgba(255, 255, 255, 0.1)';
-    }
-  } else {
-    showNotification("User is not speaking or not connected", "warning");
+async function leaveRoom() {
+  if (localTracks.audioTrack) {
+    localTracks.audioTrack.close();
+    localTracks.audioTrack = null;
   }
-};
 
-// --- URL Params Handling ---
-window.addEventListener('DOMContentLoaded', () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const roomParam = urlParams.get('room');
-  const passParam = urlParams.get('pass');
-
-  if (roomParam) {
-    form.roomname.value = roomParam;
+  if (rtcClient) {
+    await rtcClient.leave();
+    rtcClient = null;
   }
-  if (passParam && form.roompassword) {
-    form.roompassword.value = passParam;
+
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+
+  membersContainer.innerHTML = '';
+  chatMessages.innerHTML = '';
+  chatPanel.classList.remove('open');
+  roomSection.style.display = 'none';
+  landingSection.classList.add('active-section');
+  form.reset();
+  currentAvatar = null;
+  document.querySelectorAll('.avatar-selection').forEach(av => av.classList.remove('selected'));
+}
+
+function shareRoom() {
+  const url = `${window.location.origin}?room=${encodeURIComponent(currentRoom)}${currentPassword ? `&password=${encodeURIComponent(currentPassword)}` : ''}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showNotification('Room link copied to clipboard!', 'success');
+  }).catch(() => {
+    showNotification('Failed to copy link', 'error');
+  });
+}
+
+function showNotification(message, type = 'info') {
+  const notification = document.createElement('div');
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+
+  const notificationArea = document.getElementById('notification-area');
+  notificationArea.appendChild(notification);
+
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
+// ===== CHAT FUNCTIONALITY =====
+
+// Initialize emoji picker
+function initEmojiPicker() {
+  emojis.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.textContent = emoji;
+    btn.className = 'emoji-btn';
+    btn.onclick = () => {
+      chatInput.value += emoji;
+      emojiPicker.classList.add('hidden');
+      chatInput.focus();
+    };
+    emojiPicker.appendChild(btn);
+  });
+}
+
+// Toggle chat panel
+chatBtn.addEventListener('click', () => {
+  chatPanel.classList.add('open');
+});
+
+closeChatBtn.addEventListener('click', () => {
+  chatPanel.classList.remove('open');
+});
+
+// Toggle emoji picker
+emojiBtn.addEventListener('click', () => {
+  emojiPicker.classList.toggle('hidden');
+});
+
+// Send message
+function sendMessage() {
+  const message = chatInput.value.trim();
+  if (!message || !socket || !currentRoom) return;
+
+  socket.emit('chat-message', {
+    room: currentRoom,
+    message,
+    userName: currentName,
+    timestamp: Date.now()
+  });
+
+  chatInput.value = '';
+  emojiPicker.classList.add('hidden');
+}
+
+sendBtn.addEventListener('click', sendMessage);
+
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    sendMessage();
   }
 });
 
-// --- Listeners ---
+// Setup chat listeners
+function setupChatListeners() {
+  socket.on('chat-message', ({ id, userName, message, timestamp }) => {
+    addChatMessage(userName, message, timestamp, id === socket.id);
+  });
+}
 
+// Add message to chat
+function addChatMessage(userName, message, timestamp, isOwn) {
+  const messageEl = document.createElement('div');
+  messageEl.className = `chat-message ${isOwn ? 'own' : ''}`;
+
+  const time = new Date(timestamp).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  messageEl.innerHTML = `
+    <div class="chat-meta">
+      <span class="chat-user">${escapeHtml(userName)}</span>
+      <span class="chat-time">${time}</span>
+    </div>
+    <div class="chat-text">${escapeHtml(message)}</div>
+  `;
+
+  chatMessages.appendChild(messageEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// HTML escape for security
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Initialize
+initEmojiPicker();
+
+// Event Listeners
 form.addEventListener('submit', joinRoom);
 micBtn.addEventListener('click', toggleMic);
 leaveBtn.addEventListener('click', leaveRoom);
