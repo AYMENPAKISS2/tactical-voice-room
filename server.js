@@ -187,6 +187,7 @@ const generateRtcToken = (req, resp) => {
 };
 
 app.get('/api/token/rtc', generateRtcToken);
+app.get('/rtc-token', generateRtcToken); // Legacy support for cached clients
 
 // Catch-all for SPA
 app.get(/.*/, (req, res) => {
