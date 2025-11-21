@@ -1,3 +1,30 @@
+/* Permanent Bottom Chat Panel - War Game Style */
+#chat-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 280px;
+    background: linear-gradient(180deg, transparent 0%, rgba(5, 8, 10, 0.98) 15%, rgba(10, 12, 15, 0.98) 100%);
+    border-top: 3px solid var(--accent-color);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.8), 0 -2px 8px rgba(222, 155, 53, 0.3);
+    display: none;
+    /* Hidden by default */
+    flex-direction: column;
+    z-index: 50;
+    padding: 1rem 1.5rem;
+    pointer-events: none;
+}
+
+/* Show chat when visible class is added */
+#chat-panel.visible {
+    display: flex;
+}
+
+#chat-panel * {
+    pointer-events: auto;
+}
+
 #chat-messages {
     flex: 1;
     overflow-y: auto;
