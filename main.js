@@ -72,6 +72,30 @@ async function joinRoom(e) {
   currentRoom = form.roomname.value;
   currentPassword = form.roompassword.value || '';
 
+  // Show Intro Video
+  const introOverlay = document.getElementById('intro-overlay');
+  const introVideo = document.getElementById('intro-video');
+  const skipBtn = document.getElementById('skip-intro-btn');
+
+  introOverlay.classList.remove('hidden');
+
+  try {
+    await introVideo.play();
+  } catch (err) {
+    console.log("Auto-play prevented", err);
+  }
+
+  const proceedToJoin = async () => {
+    introVideo.pause();
+    introOverlay.classList.add('hidden');
+    await executeJoinLogic();
+  };
+
+  introVideo.onended = proceedToJoin;
+  skipBtn.onclick = proceedToJoin;
+}
+
+async function executeJoinLogic() {
   try {
     // 1. Initialize Agora Client
     agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
@@ -180,9 +204,6 @@ async function joinRoom(e) {
         removeMemberCard(uid);
         delete remoteUsers[uid];
         showNotification(`${name} left the sector`, 'info');
-      } else {
-        // Fallback if we can't find by UID (shouldn't happen if synced)
-        // Try to remove by socket ID if we stored it differently, but here we use UID as key for cards
       }
     });
 
