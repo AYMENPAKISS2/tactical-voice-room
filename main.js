@@ -1,13 +1,15 @@
-// Imports removed to use CDN globals (AgoraRTC)
+import { rtcAppId } from './agoraConfig.js';
+
 // State
-let socket; // Socket.io client
-let localStream;
-let peers = {}; // socketId -> RTCPeerConnection
+let socket; // Socket.io client for Chat & Metadata
+let agoraClient; // Agora RTC Client
+let localAudioTrack;
 let micMuted = true;
 let currentAvatar = null;
 let currentRoom = null;
 let currentName = null;
 let currentPassword = null;
+let remoteUsers = {}; // Agora UID -> User Info (from socket)
 
 // UI Elements
 const landingSection = document.getElementById('landing-section');
@@ -28,14 +30,6 @@ const sendBtn = document.getElementById('send-btn');
 const chatMessages = document.getElementById('chat-messages');
 const emojiBtn = document.getElementById('emoji-btn');
 const emojiPicker = document.getElementById('emoji-picker');
-
-// WebRTC Config
-const rtcConfig = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
-};
 
 // Emoji list
 const emojis = ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😤', '😠', '😡', '🤬', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '👍', '👎', '👊', '✊', '🤛', '🤜', '🤞', '✌️', '🤟', '🤘', '👌', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐️', '👋', '🤙', '💪', '🖕', '✍️', '🙏', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '🔥', '✨', '💫', '⭐', '🌟', '💥', '💯', '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '🥈', '🥉', '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🎱', '🏓', '🏸', '🥅', '🏒', '🏑', '🥍', '🏏', '⛳', '🏹', '🎣', '🥊', '🥋', '🎽', '⛸️', '🥌', '🛷', '🎿', '⛷️', '🏂', '🏋️', '🤼', '🤸', '🤺', '⛹️', '🤾', '🏌️', '🏇', '🧘', '🏄', '🏊', '🤽', '🚣', '🧗', '🚴', '🚵', '🎪', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🎻', '🎲', '🎯', '🎳', '🎮', '🎰', '🧩'];
@@ -79,111 +73,117 @@ async function joinRoom(e) {
   currentPassword = form.roompassword.value || '';
 
   try {
-    // Connect Socket.io
+    // 1. Initialize Agora Client
+    agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+
+    // 2. Connect Socket.io (for Chat & User Metadata)
     socket = io();
 
-    // Get Local Stream
+    // 3. Join Agora Channel
+    // Use room name as channel name. 
+    // UID will be auto-assigned by Agora or we can pass null to let Agora assign it.
+    // We'll use the socket ID as the UID if possible, but Agora UIDs must be numbers (or strings in string mode).
+    // Simplest: Let Agora assign a numeric UID, and we map it to Socket ID via socket events.
+    // ACTUALLY: To sync names/avatars, we need a common ID.
+    // Strategy: 
+    // - Join Socket.io first -> get socket.id
+    // - Use a hash of socket.id or just let Agora assign UID and broadcast the mapping over Socket.io.
+    // - EASIER: Let Agora assign UID, then send that UID to Socket.io "join-room".
+
+    const uid = await agoraClient.join(rtcAppId, currentRoom, null, null);
+
+    // 4. Create and Publish Local Audio Track
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      localStream.getAudioTracks()[0].enabled = false; // Start muted
+      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+      // Start muted
+      localAudioTrack.setEnabled(false);
       micMuted = true;
       updateMicButton();
+
+      await agoraClient.publish([localAudioTrack]);
+
+      // Volume indicator for self
+      setInterval(() => {
+        if (localAudioTrack && !micMuted) {
+          const level = localAudioTrack.getVolumeLevel();
+          if (level > 0.1) {
+            highlightSpeaker(uid); // Self highlight
+          }
+        }
+      }, 200);
+
     } catch (err) {
       console.error('Microphone access error:', err);
       showNotification('Could not access microphone. Joining as listener.', 'error');
     }
 
-    // Join room with password
+    // 5. Join Socket Room with Metadata + Agora UID
     socket.emit('join-room', {
       room: currentRoom,
       password: currentPassword,
       userName: currentName,
-      avatar: currentAvatar
+      avatar: currentAvatar,
+      agoraUid: uid // Send Agora UID to server so others know who we are
     });
 
-    // Handle join response
-    socket.on('join-success', async ({ users, userCount }) => {
+    // Handle Agora Events
+    agoraClient.on("user-published", handleUserPublished);
+    agoraClient.on("user-unpublished", handleUserUnpublished);
+    agoraClient.on("volume-indicator", handleVolumeIndicator);
+
+    // Enable volume indicator
+    agoraClient.enableAudioVolumeIndicator();
+
+    // Handle Socket Events
+    socket.on('join-success', ({ users, userCount }) => {
       console.log('Joined room successfully', users);
 
-      // Update UI
       landingSection.classList.remove('active-section');
       roomSection.classList.add('active-section');
       roomNameDisplay.textContent = currentRoom;
       userCountDisplay.textContent = `${userCount} Operative${userCount !== 1 ? 's' : ''}`;
 
       // Add self
-      addMemberCard(socket.id, currentName, currentAvatar, true);
+      addMemberCard(uid, currentName, currentAvatar, true);
 
-      // Show chat panel
-      chatPanel.classList.add('visible');
-
-      // Setup chat listeners
-      setupChatListeners();
-
-      // Connect to existing users (We are the initiator)
+      // Add existing users
       users.forEach(user => {
-        createPeerConnection(user.id, user.userName, user.avatar, true);
+        if (user.agoraUid && user.agoraUid !== uid) {
+          remoteUsers[user.agoraUid] = user;
+          addMemberCard(user.agoraUid, user.userName, user.avatar);
+        }
       });
+
+      chatPanel.classList.add('visible');
+      setupChatListeners();
     });
 
     socket.on('join-error', ({ message }) => {
       showNotification(message, 'error');
+      leaveRoom();
     });
 
-    socket.on('user-joined', ({ id, userName, avatar }) => {
+    socket.on('user-joined', ({ id, userName, avatar, agoraUid }) => {
       console.log('User joined:', userName);
-      addMemberCard(id, userName, avatar);
-      showNotification(`${userName} joined the room`, 'success');
-      // Wait for offer from new user (They are initiator)
-    });
-
-    // WebRTC Signaling Handlers
-    socket.on('offer', async (payload) => {
-      const pc = createPeerConnection(payload.caller, payload.userName, payload.avatar, false);
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit('answer', {
-        target: payload.caller,
-        caller: socket.id,
-        sdp: pc.localDescription
-      });
-    });
-
-    socket.on('answer', async (payload) => {
-      const pc = peers[payload.caller];
-      if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-      }
-    });
-
-    socket.on('ice-candidate', async (payload) => {
-      const pc = peers[payload.caller];
-      if (pc && payload.candidate) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        } catch (e) {
-          console.error('Error adding received ice candidate', e);
-        }
+      if (agoraUid) {
+        remoteUsers[agoraUid] = { id, userName, avatar, agoraUid };
+        addMemberCard(agoraUid, userName, avatar);
+        showNotification(`${userName} joined the room`, 'success');
       }
     });
 
     socket.on('user-left', (socketId) => {
-      // Get name before removing
-      const card = document.querySelector(`[data-socket-id="${socketId}"]`);
-      const name = card ? card.querySelector('.member-name').innerText.replace(' (You)', '') : 'Operative';
-
-      removeMemberCard(socketId);
-      if (peers[socketId]) {
-        peers[socketId].close();
-        delete peers[socketId];
+      // Find Agora UID for this socket ID
+      const uid = Object.keys(remoteUsers).find(key => remoteUsers[key].id === socketId);
+      if (uid) {
+        const name = remoteUsers[uid].userName;
+        removeMemberCard(uid);
+        delete remoteUsers[uid];
+        showNotification(`${name} left the sector`, 'info');
+      } else {
+        // Fallback if we can't find by UID (shouldn't happen if synced)
+        // Try to remove by socket ID if we stored it differently, but here we use UID as key for cards
       }
-      // Remove audio element
-      const audioEl = document.getElementById(`audio-${socketId}`);
-      if (audioEl) audioEl.remove();
-
-      showNotification(`${name} left the sector`, 'info');
     });
 
     socket.on('user-count', (count) => {
@@ -192,109 +192,56 @@ async function joinRoom(e) {
 
   } catch (error) {
     console.error('Join error:', error);
-    showNotification('Failed to join room', 'error');
+    showNotification('Failed to join room: ' + error.message, 'error');
   }
 }
 
-function createPeerConnection(targetSocketId, userName, avatar, isInitiator) {
-  const pc = new RTCPeerConnection(rtcConfig);
-  peers[targetSocketId] = pc;
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('ice-candidate', {
-        target: targetSocketId,
-        caller: socket.id,
-        candidate: event.candidate
-      });
-    }
-  };
-
-  pc.ontrack = (event) => {
-    const stream = event.streams[0];
-    let audioEl = document.getElementById(`audio-${targetSocketId}`);
-    if (!audioEl) {
-      audioEl = document.createElement('audio');
-      audioEl.id = `audio-${targetSocketId}`;
-      audioEl.autoplay = true;
-      document.body.appendChild(audioEl);
-    }
-    audioEl.srcObject = stream;
-
-    // Simple volume indicator using AudioContext
-    setupVolumeIndicator(stream, targetSocketId);
-  };
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+async function handleUserPublished(user, mediaType) {
+  await agoraClient.subscribe(user, mediaType);
+  if (mediaType === "audio") {
+    user.audioTrack.play();
   }
-
-  if (isInitiator) {
-    pc.createOffer().then(offer => {
-      pc.setLocalDescription(offer);
-      socket.emit('offer', {
-        target: targetSocketId,
-        caller: socket.id,
-        userName: currentName,
-        avatar: currentAvatar,
-        sdp: offer
-      });
-    });
-  }
-
-  // If we are not the initiator, we wait for an offer (handled in socket.on('offer'))
-  // But we still need to add the member card if it doesn't exist (e.g. we are the receiver)
-  if (!document.querySelector(`[data-socket-id="${targetSocketId}"]`)) {
-    addMemberCard(targetSocketId, userName, avatar);
-  }
-
-  return pc;
 }
 
-function setupVolumeIndicator(stream, socketId) {
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
+function handleUserUnpublished(user) {
+  // Agora handles stopping playback automatically usually, but good to know
+}
 
-  const bufferLength = analyser.frequencyBinCount;
-  const dataArray = new Uint8Array(bufferLength);
+function handleVolumeIndicator(volumes) {
+  volumes.forEach((volume) => {
+    const { uid, level } = volume;
+    if (level > 5) { // Threshold
+      highlightSpeaker(uid);
+    }
+  });
+}
 
-  const checkVolume = () => {
-    if (!peers[socketId]) {
-      audioContext.close();
-      return;
-    }
-    analyser.getByteFrequencyData(dataArray);
-    let sum = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      sum += dataArray[i];
-    }
-    const average = sum / bufferLength;
+function highlightSpeaker(uid) {
+  // If uid is 0, it's local user (but we handle self separately usually, or Agora returns 0)
+  // Actually Agora returns the real UID for remote, and 0 for local if not specified.
+  // But since we joined with a UID, it might return that.
+  // Let's check both.
 
-    if (average > 10) { // Threshold
-      const card = document.querySelector(`[data-socket-id="${socketId}"]`);
-      if (card) {
-        const wrapper = card.querySelector('.avatar-wrapper');
-        if (wrapper) {
-          wrapper.classList.add('speaking');
-          setTimeout(() => wrapper.classList.remove('speaking'), 100);
-        }
-      }
+  let targetUid = uid;
+  if (uid === 0 && agoraClient) targetUid = agoraClient.uid;
+
+  const card = document.querySelector(`[data-uid="${targetUid}"]`);
+  if (card) {
+    const wrapper = card.querySelector('.avatar-wrapper');
+    if (wrapper) {
+      wrapper.classList.add('speaking');
+      setTimeout(() => wrapper.classList.remove('speaking'), 200);
     }
-    requestAnimationFrame(checkVolume);
-  };
-  checkVolume();
+  }
 }
 
 // UI Functions
-function addMemberCard(socketId, userName, avatarId, isSelf = false) {
-  if (document.querySelector(`[data-socket-id="${socketId}"]`)) return;
+function addMemberCard(uid, userName, avatarId, isSelf = false) {
+  if (document.querySelector(`[data-uid="${uid}"]`)) return;
 
   const card = document.createElement('div');
   card.className = 'member-card';
-  card.dataset.socketId = socketId;
+  card.dataset.uid = uid;
 
   card.innerHTML = `
     <div class="avatar-wrapper">
@@ -302,47 +249,29 @@ function addMemberCard(socketId, userName, avatarId, isSelf = false) {
     </div>
     <div class="member-info">
       <span class="member-name">${userName}${isSelf ? ' (You)' : ''}</span>
-      ${!isSelf ? `
-        <button class="mute-remote-btn" data-socket-id="${socketId}" title="Mute locally">
-          🔇
-        </button>
-      ` : ''}
     </div>
   `;
+  // Removed local mute button for simplicity in this version, can add back if needed using user.audioTrack.setVolume(0)
 
   membersContainer.appendChild(card);
-
-  // Local mute functionality
-  if (!isSelf) {
-    const muteBtn = card.querySelector('.mute-remote-btn');
-    muteBtn.addEventListener('click', () => {
-      const audioEl = document.getElementById(`audio-${socketId}`);
-      if (audioEl) {
-        audioEl.muted = !audioEl.muted;
-        muteBtn.textContent = audioEl.muted ? '🔈' : '🔇';
-        muteBtn.style.opacity = audioEl.muted ? '0.5' : '1';
-      }
-    });
-  }
 }
 
-function removeMemberCard(socketId) {
-  const card = document.querySelector(`[data-socket-id="${socketId}"]`);
+function removeMemberCard(uid) {
+  const card = document.querySelector(`[data-uid="${uid}"]`);
   if (card) {
     card.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => card.remove(), 300);
   }
 }
 
-function toggleMic() {
-  if (localStream) {
-    const audioTrack = localStream.getAudioTracks()[0];
-    audioTrack.enabled = !audioTrack.enabled;
-    micMuted = !audioTrack.enabled;
+async function toggleMic() {
+  if (localAudioTrack) {
+    micMuted = !micMuted;
+    await localAudioTrack.setEnabled(!micMuted);
     updateMicButton();
 
     // Update self card visual
-    const selfCard = document.querySelector(`[data-socket-id="${socket.id}"]`);
+    const selfCard = document.querySelector(`[data-uid="${agoraClient.uid}"]`);
     if (selfCard) {
       const wrapper = selfCard.querySelector('.avatar-wrapper');
       if (micMuted) {
@@ -366,17 +295,22 @@ function updateMicButton() {
 }
 
 async function leaveRoom() {
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
+  if (localAudioTrack) {
+    localAudioTrack.close();
+    localAudioTrack = null;
   }
 
-  Object.values(peers).forEach(pc => pc.close());
-  peers = {};
+  if (agoraClient) {
+    await agoraClient.leave();
+    agoraClient = null;
+  }
 
   if (socket) {
     socket.disconnect();
+    socket = null;
   }
+
+  remoteUsers = {};
 
   // Clear UI
   membersContainer.innerHTML = '';
@@ -385,9 +319,6 @@ async function leaveRoom() {
 
   roomSection.classList.remove('active-section');
   landingSection.classList.add('active-section');
-
-  // Remove all audio elements
-  document.querySelectorAll('audio').forEach(el => el.remove());
 
   form.reset();
   currentAvatar = null;
@@ -431,7 +362,6 @@ function playNotificationSound(type = 'info') {
   gain.connect(audioCtx.destination);
 
   if (type === 'error') {
-    // Soft low thud instead of harsh buzz
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(150, audioCtx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
@@ -442,7 +372,6 @@ function playNotificationSound(type = 'info') {
     osc.start();
     osc.stop(audioCtx.currentTime + 0.3);
   } else if (type === 'chat') {
-    // Gentle pop
     osc.type = 'sine';
     osc.frequency.setValueAtTime(600, audioCtx.currentTime);
 
@@ -452,7 +381,6 @@ function playNotificationSound(type = 'info') {
     osc.start();
     osc.stop(audioCtx.currentTime + 0.1);
   } else {
-    // Smooth success chime
     osc.type = 'sine';
     osc.frequency.setValueAtTime(400, audioCtx.currentTime);
     osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.1);
@@ -467,7 +395,6 @@ function playNotificationSound(type = 'info') {
 
 // ===== CHAT FUNCTIONALITY =====
 
-// Initialize emoji picker
 function setupEmojiPicker() {
   emojis.forEach(emoji => {
     const btn = document.createElement('button');
@@ -482,12 +409,10 @@ function setupEmojiPicker() {
   });
 }
 
-// Toggle emoji picker
 emojiBtn.addEventListener('click', () => {
   emojiPicker.classList.toggle('hidden');
 });
 
-// Send message
 function sendMessage() {
   const message = chatInput.value.trim();
   if (!message || !socket || !currentRoom) return;
@@ -511,14 +436,12 @@ chatInput.addEventListener('keypress', (e) => {
   }
 });
 
-// Setup chat listeners
 function setupChatListeners() {
   socket.on('chat-message', ({ id, userName, message, timestamp }) => {
     addChatMessage(userName, message, timestamp, id === socket.id);
   });
 }
 
-// Add message to chat
 function addChatMessage(userName, message, timestamp, isOwn) {
   const messageEl = document.createElement('div');
   messageEl.className = `chat-message ${isOwn ? 'own' : ''}`;
@@ -543,14 +466,12 @@ function addChatMessage(userName, message, timestamp, isOwn) {
   }
 }
 
-// HTML escape for security
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// Initialize
 setupEmojiPicker();
 
 // Event Listeners
