@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tactical Voice Room</title>
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/chat.css">
@@ -18,13 +18,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/app-icon-192.png">
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(reg => console.log('SW registered', reg))
-                .catch(err => console.error('SW failed', err));
-        }
-    </script>
+    <!-- Service Worker Removed for Development Stability -->
 </head>
 
 <body>
@@ -112,7 +106,6 @@
     </aside>
 
     <div id="notification-area"></div>
-    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script type="module" src="/main.js"></script>
 </body>

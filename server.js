@@ -2,28 +2,21 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
-import nocache from 'nocache';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
 const require = createRequire(import.meta.url);
-const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
-
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Changed to 3001 to avoid conflict
+const PORT = process.env.PORT || 3001;
 
-// Force no cache for API
-app.use(nocache());
 app.use(cors());
-
-// Serve static files from current directory
 app.use(express.static(path.join(__dirname, '.')));
 
 const httpServer = createServer(app);
@@ -34,25 +27,17 @@ const io = new Server(httpServer, {
     }
 });
 
-const APP_ID = process.env.APP_ID ? process.env.APP_ID.trim() : '';
-const APP_CERTIFICATE = process.env.APP_CERTIFICATE ? process.env.APP_CERTIFICATE.trim() : '';
-
-if (!APP_ID || !APP_CERTIFICATE) {
-    console.warn("⚠️  WARNING: APP_ID and APP_CERTIFICATE not set. Voice features will not work.");
-    console.warn("⚠️  Please set these environment variables in Railway dashboard.");
-} else {
-    console.log(`✅ Agora Config: APP_ID=${APP_ID.substring(0, 5)}..., CERT=${APP_CERTIFICATE.substring(0, 5)}...`);
-}
+console.log(`✅ VATO SERVER (WebRTC) RUNNING on port ${PORT}`);
 
 // --- Socket.io Signaling ---
-const users = {}; // socketId -> { room, name, avatar, rtcUid }
+const users = {}; // socketId -> { room, name, avatar }
 const socketToRoom = {}; // socketId -> room
 const roomPasswords = {}; // roomName -> password
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('join-room', ({ room, userName, avatar, rtcUid, password }) => {
+    socket.on('join-room', ({ room, userName, avatar, password }) => {
         // Password Validation
         if (roomPasswords[room]) {
             if (roomPasswords[room] !== password) {
@@ -69,7 +54,7 @@ io.on('connection', (socket) => {
         }
 
         socket.join(room);
-        users[socket.id] = { room, userName, avatar, rtcUid };
+        users[socket.id] = { room, userName, avatar };
         socketToRoom[socket.id] = room;
 
         console.log(`User ${userName} joined room ${room}`);
@@ -78,8 +63,7 @@ io.on('connection', (socket) => {
         socket.to(room).emit('user-joined', {
             id: socket.id,
             userName,
-            avatar,
-            rtcUid
+            avatar
         });
 
         // Send list of existing users to the new user
@@ -99,6 +83,19 @@ io.on('connection', (socket) => {
             users: usersInRoom,
             userCount: clients ? clients.size : 0
         });
+    });
+
+    // WebRTC Signaling Events
+    socket.on('offer', (payload) => {
+        io.to(payload.target).emit('offer', payload);
+    });
+
+    socket.on('answer', (payload) => {
+        io.to(payload.target).emit('answer', payload);
+    });
+
+    socket.on('ice-candidate', (payload) => {
+        io.to(payload.target).emit('ice-candidate', payload);
     });
 
     // Chat message broadcasting
@@ -133,55 +130,11 @@ io.on('connection', (socket) => {
     });
 });
 
-// --- Agora RTC Token ---
-const generateRtcToken = (req, resp) => {
-    resp.header('Access-Control-Allow-Origin', '*');
-
-    const channelName = req.query.channelName;
-    if (!channelName) {
-        return resp.status(500).json({ 'error': 'channel is required' });
-    }
-
-    let uid = req.query.uid;
-    if (!uid || uid === '') {
-        uid = 0;
-    } else {
-        uid = parseInt(uid, 10);
-    }
-    let role = RtcRole.SUBSCRIBER;
-    if (req.query.role === 'publisher') {
-        role = RtcRole.PUBLISHER;
-    }
-
-    const expirationTimeInSeconds = 3600;
-    const currentTimestamp = Math.floor(Date.now() / 1000);
-    const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
-
-    // Use env vars or fallback to provided keys for local testing
-    const appId = process.env.APP_ID || 'abfbe50f6a26478e8edd01dd05cf2b65';
-    const appCertificate = process.env.APP_CERTIFICATE || '31fb5977f0bb4f799be0edc88e814afe';
-
-    if (!appId || !appCertificate) {
-        return resp.status(500).json({ 'error': 'APP_ID and APP_CERTIFICATE are required' });
-    }
-
-    try {
-        const token = RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, uid, role, privilegeExpiredTs);
-        return resp.json({ 'rtcToken': token, 'uid': uid });
-    } catch (err) {
-        console.error('Error generating token:', err);
-        return resp.status(500).json({ 'error': 'Failed to generate token' });
-    }
-};
-
-app.get('/api/token/rtc', generateRtcToken);
-app.get('/rtc-token', generateRtcToken); // Legacy support for cached clients
-
 // Catch-all for SPA
 app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 httpServer.listen(PORT, () => {
-    console.log(`✅ VATO SERVER RUNNING on port ${PORT}`);
+    console.log(`Server running on port ${PORT} with Socket.io`);
 });
