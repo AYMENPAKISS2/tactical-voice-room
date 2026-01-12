@@ -194,13 +194,45 @@ input:focus {
     top: 0;
     left: 0;
     width: 100%;
-    padding: 1.5rem 2rem;
+    padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: rgba(11, 12, 15, 0.9);
     border-bottom: 1px solid var(--panel-border);
     z-index: 10;
+}
+
+/* Members Container - Horizontal at top */
+#members-container {
+    position: absolute;
+    top: 85px;
+    left: 0;
+    width: 100%;
+    padding: 1rem 2rem;
+    display: flex;
+    flex-direction: row;
+    gap: 1.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: rgba(11, 12, 15, 0.7);
+    border-bottom: 2px solid var(--panel-border);
+    z-index: 9;
+    height: 140px;
+    align-items: center;
+}
+
+#members-container::-webkit-scrollbar {
+    height: 6px;
+}
+
+#members-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#members-container::-webkit-scrollbar-thumb {
+    background: var(--accent-color);
+    border-radius: 3px;
 }
 
 .room-info {
@@ -222,6 +254,14 @@ input:focus {
     margin: 0;
     color: var(--text-primary);
     text-shadow: none;
+}
+
+/* Room Section Background */
+#room-section {
+    background: linear-gradient(180deg, rgba(11, 12, 15, 0.95) 0%, rgba(5, 8, 10, 0.98) 100%);
+    background-image:
+        radial-gradient(circle at 50% 50%, rgba(222, 155, 53, 0.03) 0%, transparent 50%),
+        linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
 }
 
 .user-count {
@@ -287,12 +327,13 @@ input:focus {
     padding: 4px 12px;
     border-radius: 12px;
     border: 1px solid var(--panel-border);
+    white-space: nowrap;
 }
 
 .member-name {
     font-weight: 600;
     letter-spacing: 1px;
-    font-size: 1.1rem;
+    font-size: 0.9rem;
 }
 
 .mute-remote-btn {
@@ -418,12 +459,9 @@ input:focus {
     }
 
     #members-container {
-        padding-top: 180px;
-        /* More space for stacked header */
-        padding-bottom: 100px;
-        /* Space for chat */
-        grid-template-columns: repeat(2, 1fr);
-        /* 2 cols on mobile */
+        top: 140px;
+        height: 110px;
+        padding: 0.75rem 1rem;
         gap: 1rem;
     }
 

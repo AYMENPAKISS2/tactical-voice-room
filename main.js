@@ -1,15 +1,23 @@
-import { rtcAppId } from './agoraConfig.js';
-
 // State
-let socket; // Socket.io client for Chat & Metadata
-let agoraClient; // Agora RTC Client
-let localAudioTrack;
-let micMuted = true;
+let socket;
+let localStream;
+let peers = {}; // socketId -> RTCPeerConnection
 let currentAvatar = null;
 let currentRoom = null;
 let currentName = null;
 let currentPassword = null;
-let remoteUsers = {}; // Agora UID -> User Info (from socket)
+let micMuted = true;
+
+// Configuration
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ]
+};
 
 // UI Elements
 const landingSection = document.getElementById('landing-section');
@@ -97,66 +105,27 @@ async function joinRoom(e) {
 
 async function executeJoinLogic() {
   try {
-    // 1. Initialize Agora Client
-    agoraClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-
-    // 2. Connect Socket.io (for Chat & User Metadata)
+    // Initialize Socket.io
     socket = io();
 
-    // 3. Join Agora Channel
-    // Use room name as channel name. 
-    // UID will be auto-assigned by Agora or we can pass null to let Agora assign it.
-    // We'll use the socket ID as the UID if possible, but Agora UIDs must be numbers (or strings in string mode).
-    // Simplest: Let Agora assign a numeric UID, and we map it to Socket ID via socket events.
-    // ACTUALLY: To sync names/avatars, we need a common ID.
-    // Strategy: 
-    // - Join Socket.io first -> get socket.id
-    // - Use a hash of socket.id or just let Agora assign UID and broadcast the mapping over Socket.io.
-    // - EASIER: Let Agora assign UID, then send that UID to Socket.io "join-room".
-
-    const uid = await agoraClient.join(rtcAppId, currentRoom, null, null);
-
-    // 4. Create and Publish Local Audio Track
+    // Get Local Stream
     try {
-      localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-      // Start muted
-      localAudioTrack.setEnabled(false);
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStream.getAudioTracks()[0].enabled = false; // Start muted
       micMuted = true;
       updateMicButton();
-
-      await agoraClient.publish([localAudioTrack]);
-
-      // Volume indicator for self
-      setInterval(() => {
-        if (localAudioTrack && !micMuted) {
-          const level = localAudioTrack.getVolumeLevel();
-          if (level > 0.1) {
-            highlightSpeaker(uid); // Self highlight
-          }
-        }
-      }, 200);
-
     } catch (err) {
       console.error('Microphone access error:', err);
       showNotification('Could not access microphone. Joining as listener.', 'error');
     }
 
-    // 5. Join Socket Room with Metadata + Agora UID
+    // Join Socket Room
     socket.emit('join-room', {
       room: currentRoom,
       password: currentPassword,
       userName: currentName,
-      avatar: currentAvatar,
-      agoraUid: uid // Send Agora UID to server so others know who we are
+      avatar: currentAvatar
     });
-
-    // Handle Agora Events
-    agoraClient.on("user-published", handleUserPublished);
-    agoraClient.on("user-unpublished", handleUserUnpublished);
-    agoraClient.on("volume-indicator", handleVolumeIndicator);
-
-    // Enable volume indicator
-    agoraClient.enableAudioVolumeIndicator();
 
     // Handle Socket Events
     socket.on('join-success', ({ users, userCount }) => {
@@ -168,13 +137,14 @@ async function executeJoinLogic() {
       userCountDisplay.textContent = `${userCount} Operative${userCount !== 1 ? 's' : ''}`;
 
       // Add self
-      addMemberCard(uid, currentName, currentAvatar, true);
+      addMemberCard(socket.id, currentName, currentAvatar, true);
 
-      // Add existing users
+      // Add existing users and initiate connections
       users.forEach(user => {
-        if (user.agoraUid && user.agoraUid !== uid) {
-          remoteUsers[user.agoraUid] = user;
-          addMemberCard(user.agoraUid, user.userName, user.avatar);
+        if (user.id !== socket.id) {
+          addMemberCard(user.id, user.userName, user.avatar);
+          // We are the new joiner, so we initiate offers to existing users
+          initiateConnection(user.id);
         }
       });
 
@@ -187,28 +157,42 @@ async function executeJoinLogic() {
       leaveRoom();
     });
 
-    socket.on('user-joined', ({ id, userName, avatar, agoraUid }) => {
+    socket.on('user-joined', ({ id, userName, avatar }) => {
       console.log('User joined:', userName);
-      if (agoraUid) {
-        remoteUsers[agoraUid] = { id, userName, avatar, agoraUid };
-        addMemberCard(agoraUid, userName, avatar);
-        showNotification(`${userName} joined the room`, 'success');
-      }
+      addMemberCard(id, userName, avatar);
+      showNotification(`${userName} joined the room`, 'success');
+      // Wait for offer from them (or we can wait for them to initiate)
+      // Usually new joiner initiates, so existing users wait for offer.
     });
 
-    socket.on('user-left', (socketId) => {
-      // Find Agora UID for this socket ID
-      const uid = Object.keys(remoteUsers).find(key => remoteUsers[key].id === socketId);
-      if (uid) {
-        const name = remoteUsers[uid].userName;
-        removeMemberCard(uid);
-        delete remoteUsers[uid];
+    socket.on('user-left', (id) => {
+      const card = document.querySelector(`[data-id="${id}"]`);
+      if (card) {
+        const name = card.querySelector('.member-name').textContent;
+        removeMemberCard(id);
         showNotification(`${name} left the sector`, 'info');
+      }
+      if (peers[id]) {
+        peers[id].close();
+        delete peers[id];
       }
     });
 
     socket.on('user-count', (count) => {
       userCountDisplay.textContent = `${count} Operative${count !== 1 ? 's' : ''}`;
+    });
+
+    // WebRTC Signaling
+    socket.on('offer', async ({ caller, offer }) => {
+      await handleOffer(caller, offer);
+    });
+
+    socket.on('answer', async ({ caller, answer }) => {
+      await handleAnswer(caller, answer);
+    });
+
+    socket.on('ice-candidate', async ({ caller, candidate }) => {
+      await handleCandidate(caller, candidate);
     });
 
   } catch (error) {
@@ -217,36 +201,108 @@ async function executeJoinLogic() {
   }
 }
 
-async function handleUserPublished(user, mediaType) {
-  await agoraClient.subscribe(user, mediaType);
-  if (mediaType === "audio") {
-    user.audioTrack.play();
-  }
-}
+// WebRTC Functions
 
-function handleUserUnpublished(user) {
-  // Agora handles stopping playback automatically usually, but good to know
-}
+function createPeerConnection(targetId) {
+  const pc = new RTCPeerConnection(rtcConfig);
 
-function handleVolumeIndicator(volumes) {
-  volumes.forEach((volume) => {
-    const { uid, level } = volume;
-    if (level > 5) { // Threshold
-      highlightSpeaker(uid);
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('ice-candidate', {
+        target: targetId,
+        candidate: event.candidate
+      });
     }
+  };
+
+  pc.ontrack = (event) => {
+    const remoteAudio = document.createElement('audio');
+    remoteAudio.srcObject = event.streams[0];
+    remoteAudio.autoplay = true;
+    remoteAudio.id = `audio-${targetId}`;
+    document.body.appendChild(remoteAudio);
+
+    // Simple volume detection for visual feedback
+    setupAudioAnalysis(event.streams[0], targetId);
+  };
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  peers[targetId] = pc;
+  return pc;
+}
+
+async function initiateConnection(targetId) {
+  const pc = createPeerConnection(targetId);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit('offer', {
+    target: targetId,
+    offer: offer
   });
 }
 
-function highlightSpeaker(uid) {
-  // If uid is 0, it's local user (but we handle self separately usually, or Agora returns 0)
-  // Actually Agora returns the real UID for remote, and 0 for local if not specified.
-  // But since we joined with a UID, it might return that.
-  // Let's check both.
+async function handleOffer(senderId, offer) {
+  const pc = createPeerConnection(senderId);
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
 
-  let targetUid = uid;
-  if (uid === 0 && agoraClient) targetUid = agoraClient.uid;
+  socket.emit('answer', {
+    target: senderId,
+    answer: answer
+  });
+}
 
-  const card = document.querySelector(`[data-uid="${targetUid}"]`);
+async function handleAnswer(senderId, answer) {
+  const pc = peers[senderId];
+  if (pc) {
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  }
+}
+
+async function handleCandidate(senderId, candidate) {
+  const pc = peers[senderId];
+  if (pc) {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+}
+
+function setupAudioAnalysis(stream, userId) {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const source = audioContext.createMediaStreamSource(stream);
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
+  const checkVolume = () => {
+    if (!peers[userId]) {
+      audioContext.close();
+      return;
+    }
+    analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      sum += dataArray[i];
+    }
+    const average = sum / bufferLength;
+
+    if (average > 10) { // Threshold
+      highlightSpeaker(userId);
+    }
+    requestAnimationFrame(checkVolume);
+  };
+  checkVolume();
+}
+
+function highlightSpeaker(id) {
+  const card = document.querySelector(`[data-id="${id}"]`);
   if (card) {
     const wrapper = card.querySelector('.avatar-wrapper');
     if (wrapper) {
@@ -257,12 +313,12 @@ function highlightSpeaker(uid) {
 }
 
 // UI Functions
-function addMemberCard(uid, userName, avatarId, isSelf = false) {
-  if (document.querySelector(`[data-uid="${uid}"]`)) return;
+function addMemberCard(id, userName, avatarId, isSelf = false) {
+  if (document.querySelector(`[data-id="${id}"]`)) return;
 
   const card = document.createElement('div');
   card.className = 'member-card';
-  card.dataset.uid = uid;
+  card.dataset.id = id;
 
   card.innerHTML = `
     <div class="avatar-wrapper">
@@ -272,27 +328,28 @@ function addMemberCard(uid, userName, avatarId, isSelf = false) {
       <span class="member-name">${userName}${isSelf ? ' (You)' : ''}</span>
     </div>
   `;
-  // Removed local mute button for simplicity in this version, can add back if needed using user.audioTrack.setVolume(0)
 
   membersContainer.appendChild(card);
 }
 
-function removeMemberCard(uid) {
-  const card = document.querySelector(`[data-uid="${uid}"]`);
+function removeMemberCard(id) {
+  const card = document.querySelector(`[data-id="${id}"]`);
   if (card) {
     card.style.animation = 'fadeOut 0.3s ease';
     setTimeout(() => card.remove(), 300);
   }
+  const audio = document.getElementById(`audio-${id}`);
+  if (audio) audio.remove();
 }
 
-async function toggleMic() {
-  if (localAudioTrack) {
+function toggleMic() {
+  if (localStream) {
     micMuted = !micMuted;
-    await localAudioTrack.setEnabled(!micMuted);
+    localStream.getAudioTracks()[0].enabled = !micMuted;
     updateMicButton();
 
     // Update self card visual
-    const selfCard = document.querySelector(`[data-uid="${agoraClient.uid}"]`);
+    const selfCard = document.querySelector(`[data-id="${socket.id}"]`);
     if (selfCard) {
       const wrapper = selfCard.querySelector('.avatar-wrapper');
       if (micMuted) {
@@ -315,23 +372,19 @@ function updateMicButton() {
   }
 }
 
-async function leaveRoom() {
-  if (localAudioTrack) {
-    localAudioTrack.close();
-    localAudioTrack = null;
+function leaveRoom() {
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
   }
 
-  if (agoraClient) {
-    await agoraClient.leave();
-    agoraClient = null;
-  }
+  Object.values(peers).forEach(pc => pc.close());
+  peers = {};
 
   if (socket) {
     socket.disconnect();
     socket = null;
   }
-
-  remoteUsers = {};
 
   // Clear UI
   membersContainer.innerHTML = '';
@@ -344,6 +397,9 @@ async function leaveRoom() {
   form.reset();
   currentAvatar = null;
   document.querySelectorAll('.avatar-selection').forEach(av => av.classList.remove('selected'));
+
+  // Remove all remote audio elements
+  document.querySelectorAll('audio').forEach(el => el.remove());
 }
 
 function shareRoom() {

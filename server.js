@@ -87,15 +87,24 @@ io.on('connection', (socket) => {
 
     // WebRTC Signaling Events
     socket.on('offer', (payload) => {
-        io.to(payload.target).emit('offer', payload);
+        io.to(payload.target).emit('offer', {
+            caller: socket.id,
+            offer: payload.offer
+        });
     });
 
     socket.on('answer', (payload) => {
-        io.to(payload.target).emit('answer', payload);
+        io.to(payload.target).emit('answer', {
+            caller: socket.id,
+            answer: payload.answer
+        });
     });
 
     socket.on('ice-candidate', (payload) => {
-        io.to(payload.target).emit('ice-candidate', payload);
+        io.to(payload.target).emit('ice-candidate', {
+            caller: socket.id,
+            candidate: payload.candidate
+        });
     });
 
     // Chat message broadcasting

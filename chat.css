@@ -4,7 +4,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 500px;
+    height: 250px;
     background: linear-gradient(180deg, transparent 0%, rgba(5, 8, 10, 0.98) 15%, rgba(10, 12, 15, 0.98) 100%);
     border-top: 3px solid var(--accent-color);
     box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.8), 0 -2px 8px rgba(222, 155, 53, 0.3);
@@ -12,7 +12,7 @@
     /* Hidden by default */
     flex-direction: column;
     z-index: 50;
-    padding: 1rem 1.5rem;
+    padding: 0.75rem 1.5rem;
     pointer-events: none;
 }
 
@@ -250,20 +250,13 @@
     border-color: var(--accent-color);
 }
 
-/* Adjust members container to not overlap chat */
-#members-container {
-    padding-bottom: 300px !important;
-}
+/* No longer need padding-bottom since members are at top */
 
 /* Mobile adjustments */
 @media (max-width: 768px) {
     #chat-panel {
-        height: 220px;
-        padding: 0.75rem 1rem;
-    }
-
-    #members-container {
-        padding-bottom: 240px !important;
+        height: 200px;
+        padding: 0.5rem 0.75rem;
     }
 
     .emoji-picker {
